@@ -1,7 +1,8 @@
 import os
+import re
 import json
 import time
-# import pdb
+import pdb
 from pyquery import PyQuery as pq
 from selenium import webdriver
 from selenium.webdriver.support.ui import WebDriverWait
@@ -55,6 +56,7 @@ def get_portfolio(email,passwd, drivertype, driver_path=''):
     vr = {}
     vr['error'] = []
     vr['portfolio'] = []
+    vr['portfolio_raw'] = []
     
     driver.get("https://www.valueresearchonline.com/")
     
@@ -106,9 +108,47 @@ def get_portfolio(email,passwd, drivertype, driver_path=''):
     tblSnapsht = WaitFor(driver, By.CSS_SELECTOR, "table#snapshot_tbl")
     if tblSnapsht:
         rows = [i for i in pq(tblSnapsht.get_attribute('innerHTML'))('tr')]
-        print(rows)
-        
-        
+        # pdb.set_trace()
+        for n in range(2,len(rows)-2): # Last Row contains total
+            print(rows[n].text_content())
+            vr['portfolio_raw'].append([j.text_content().strip() for j in rows[n]])
+            
+        port = vr['portfolio_raw']
+        ctr = 1
+        for tt in port:
+            li = {}
+            li['id'] = ctr
+            li['status']=''
+            try:
+                name_split_pattern = "(\s*\u00a0\s*)+\|(\s*\u00a0\s*)+"
+                tstr = re.split(name_split_pattern,tt[0].strip())
+                li['name'],li['pf_pert_allocation'] = tstr[0],tstr[-1]
+                li['vro_ratings'] = tt[1].strip()
+                li['??_1'] = tt[2].strip()
+                try:
+                    li['last_unit_price'], li['last_updated'] = tt[3].split(' ')
+                except:
+                    li['last_unit_price'], li['last_updated']= '',''
+                    li['status'] = 'ERROR'
+                li['day_chng_abs'] = tt[5].strip()
+                li['day_chng_pert'] = tt[6].strip()
+                li['cost_value'] = tt[8].strip()
+                li['cost_unit_value'] = tt[9].strip()
+                li['mkt_valu'] = tt[11].strip()
+                li['units_owned'] = tt[12].strip()
+                li['return_abs'] = tt[14].strip()
+                li['return_pert'] = tt[15].strip()
+                li['cost_unit_value'] = tt[9].strip()
+                if li['status']!='ERROR':
+                    li['status'] = 'OK'
+            except: # some portfolio itms dont list all these numbers
+                li['status'] = 'ERROR'
+            
+            vr['portfolio'].append(li)
+            ctr += 1
+            
+            if not DEBUG :
+                del vr['portfolio_raw']
     if DEBUG:        
         open("valueresearch_portfolio.json","w").write(json.dumps(vr))
         

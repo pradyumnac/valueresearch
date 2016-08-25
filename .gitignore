@@ -2,4 +2,5 @@ downloads/*
 chromedriver.exe
 phantomjs.exe
 valueresearch_portfolio.json
+valueresearch_portfolio_clean.json
 debug.log
