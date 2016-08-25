@@ -14,6 +14,24 @@ UA_STRING = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_8_4) AppleWebKit/537.36 (
 DEBUG = True
 DEBUG_READ = False
 
+def log(s,log_type="INFO"):
+    if DEBUG:
+        print(log_type+":"+s)
+        
+def WaitFor(driver, strByType, strIdentifier, timeout =10):
+    try:        
+        el = WebDriverWait(driver, timeout).until(
+            EC.presence_of_element_located((strByType, strIdentifier))
+        )
+    except:
+        el = None
+    if el:
+        log("Found item:"+strByType+":"+strIdentifier)
+    else:
+        log("Not Found item:"+strByType+":"+strIdentifier,"WARN")
+        
+    return(el)
+    
 def get_portfolio(email,passwd, drivertype, driver_path=''):
     if drivertype == "Chrome":
         if driver_path is '':
@@ -21,6 +39,10 @@ def get_portfolio(email,passwd, drivertype, driver_path=''):
         from selenium.webdriver.chrome.options import Options
         opts = Options()
         opts.add_argument("user-agent="+UA_STRING)
+        # disable images
+        prefs = {"profile.managed_default_content_settings.images":2}
+        opts.add_experimental_option("prefs",prefs)
+
         driver = webdriver.Chrome(driver_path,chrome_options=opts)
     elif drivertype == "PhantomJS":
         dcap = dict(DesiredCapabilities.PHANTOMJS)
@@ -31,15 +53,66 @@ def get_portfolio(email,passwd, drivertype, driver_path=''):
     driver.set_window_size(1366, 680)
     
     vr = {}
+    vr['error'] = []
     vr['portfolio'] = []
     
     driver.get("https://www.valueresearchonline.com/")
-    driver.driver.find_element_by_css_selector("a.btnsignin").click()
     
+    btnNoThanks = WaitFor(driver, By.CSS_SELECTOR, "#noThanks")
+    if btnNoThanks:
+        btnNoThanks.click()
+    else:
+        vr['error'].append("No Thanks button not found")
     
+    linkSignin = WaitFor(driver, By.CSS_SELECTOR, "a.btnsignin")
+    if linkSignin:
+        linkSignin.click()
+    else:
+        vr['error'].append("Login link not found")
+    
+    inputboxUsername = WaitFor(driver, By.CSS_SELECTOR, "input#username")
+    if inputboxUsername:
+        inputboxUsername.send_keys(email)
+    else:
+        vr['error'].append("Username Field not found/Not in Signin Page")
+    
+    inputboxPasswd = WaitFor(driver, By.CSS_SELECTOR, "input#password")
+    if inputboxPasswd:
+        inputboxPasswd.send_keys(passwd)
+    
+        
+    btnSubmit = WaitFor(driver, By.CSS_SELECTOR, "input#submitbtn")
+    if btnSubmit:
+        btnSubmit.click()
+        if DEBUG:
+            log("Logging in..")
+        
+        lblLoginConf = WaitFor(driver, By.CSS_SELECTOR, "span#headerLoginText")
+        if lblLoginConf:
+            log("You are now logged in")
+        else:
+            vr['error'].append("Login Failed")
+    else:
+        vr['error'].append("Submit Button not found")
+    
+    linkPortfolio = WaitFor(driver, By.CSS_SELECTOR, "a[href='/port/']")
+    if linkPortfolio:
+        linkPortfolio.click()
+        
+        lblPortfolioPage = WaitFor(driver, By.CSS_SELECTOR, "div.Portfolio-summary-head")
+        if not lblPortfolioPage:
+            return(vr)
+    
+    tblSnapsht = WaitFor(driver, By.CSS_SELECTOR, "table#snapshot_tbl")
+    if tblSnapsht:
+        rows = [i for i in pq(tblSnapsht.get_attribute('innerHTML'))('tr')]
+        print(rows)
+        
+        
     if DEBUG:        
         open("valueresearch_portfolio.json","w").write(json.dumps(vr))
         
-        
+    return(vr)
+    
 if __name__ == "__main__":
-    orders = get_portfolio(os.environ['VR_username'],os.environ['VR_passwd'],"Chrome","D:\Projects\projects\valueresearch\downloads\chromedriver.exe")
+    orders = get_portfolio(os.environ['VR_username'],os.environ['VR_passwd'],"Chrome",r"D:\Projects\projects\valueresearch\downloads\chromedriver.exe")
