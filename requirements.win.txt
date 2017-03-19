@@ -1,2 +1,4 @@
-lib/lxml-3.6.4-cp35-cp35m-win_amd64.whl
+# lib/lxml-3.6.4-cp35-cp35m-win_amd64.whl
+lib/lxml-3.7.3-cp36-cp36m-win_amd64.whl
+lib/cffi-1.9.1-cp36-cp36m-win_amd64.whl
 -r requirements.base.txt

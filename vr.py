@@ -4,6 +4,7 @@ import json
 import time
 import pdb
 from pyquery import PyQuery as pq
+import lxml.html
 from selenium import webdriver
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -13,7 +14,7 @@ from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
 UA_STRING = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_8_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/29.0.1547.57 Safari/537.36"
 
 DEBUG = True
-DEBUG_READ = False
+DEBUG_READ = True
 
 def log(s,log_type="INFO"):
     if DEBUG:
@@ -32,7 +33,95 @@ def WaitFor(driver, strByType, strIdentifier, timeout =10):
         log("Not Found item:"+strByType+":"+strIdentifier,"WARN")
         
     return(el)
+
+def cleanup_data(vr=None):
+    if DEBUG_READ and not vr:
+        vr = json.loads(open("valueresearch_portfolio.json","r").read())
     
+    # vr["stocks_raw"] = lstStock
+    # vr["mfs_raw"] = lstMF
+    # vr["stock_subtotal_raw"] = lststockSubTotal
+    # vr["MF_subtotal_raw"] = lstmfSubTotal
+    # vr["summary_raw"] = lstsummary 
+    
+    lstCategory = []
+    
+    # summaryvalue
+    d = {
+        "totalvalue":vr["summary_raw"][0],
+        "onedaychngamt":vr["summary_raw"][1].split("|")[0].strip(),
+        "onedaychngpert":vr["summary_raw"][1].split("|")[1].strip(),
+        "totalprofitamt":vr["summary_raw"][2].split("|")[0].strip(),
+        "totalprofitpert":vr["summary_raw"][2].split("|")[1].strip(),
+        }
+    vr['summaryvalue'] = lstCategory
+    lstCategory = []
+    
+    # stocksubtotal
+    d = {
+        "investedamt":vr["stock_subtotal_raw"][7],
+        "latestamt":vr["stock_subtotal_raw"][10],
+        "onedaychngamt":"",
+        "onedaychngpert":"",
+        "returnamt":"",
+        "returnpert":"",
+    }
+    vr['stocksubtotal'] = d
+    
+    # mfsubtotal
+    d = {
+        "investedamt":vr["MF_subtotal_raw"][7],
+        "latestamt":vr["MF_subtotal_raw"][10],
+        "onedaychngamt":"",
+        "onedaychngpert":"",
+        "returnamt":"",
+        "returnpert":"",
+    }
+    vr['mfssubtotal'] = d
+    
+    
+    # stock
+    lstCategory = []
+    for i in vr["stocks_raw"]:
+        lstCategory.append({
+            "title":i[0].split("\u00a0")[0],
+            "portpert":i[2],
+            "latestnav":i[3].split(" ")[0],
+            "navdate":i[3].split(" ")[1],
+            "onedaychngamt":i[5],
+            "onedaychngpert":i[6],
+            "investamt":i[8],
+            "costnav":i[9],
+            "latestvalue":i[11],
+            "units":i[12],
+            "returnabs":i[14],
+            "returnpertpa":i[15]
+        })
+    vr['stock'] = lstCategory
+    lstCategory = []
+    
+    # mfs
+    lstCategory = []
+    for i in vr["mfs_raw"]:
+        lstCategory.append({
+            "title":i[0].split("\u00a0")[0],
+            "portpert":i[2],
+            "latestnav":i[3].split(" ")[0],
+            "navdate":i[3].split(" ")[1],
+            "onedaychngamt":i[5],
+            "onedaychngpert":i[6],
+            "investamt":i[8],
+            "costnav":i[9],
+            "latestvalue":i[11],
+            "units":i[12],
+            "returnabs":i[14],
+            "returnpertpa":i[15]
+        })
+    vr['mfs'] = lstCategory
+    lstCategory = []
+    
+    return vr
+ 
 def get_portfolio(email,passwd, drivertype, driver_path=''):
     if drivertype == "Chrome":
         if driver_path is '':
@@ -55,16 +144,23 @@ def get_portfolio(email,passwd, drivertype, driver_path=''):
     
     vr = {}
     vr['error'] = []
-    vr['portfolio'] = []
-    vr['portfolio_raw'] = []
+    # vr['portfolio'] = []
+    # vr['portfolio_raw'] = []
     
     driver.get("https://www.valueresearchonline.com/")
+    
+    linkSkipAdlanding = WaitFor(driver, By.LINK_TEXT, "Go directly to Value Research Online")
+    if linkSkipAdlanding:
+        linkSkipAdlanding.click()
+    else:
+        vr['warn'].append("'Skip' link not found")
+    
     
     btnNoThanks = WaitFor(driver, By.CSS_SELECTOR, "#noThanks")
     if btnNoThanks:
         btnNoThanks.click()
     else:
-        vr['error'].append("No Thanks button not found")
+        vr['error'].append("'No Thanks' button not found")
     
     linkSignin = WaitFor(driver, By.CSS_SELECTOR, "a.btnsignin")
     if linkSignin:
@@ -107,52 +203,45 @@ def get_portfolio(email,passwd, drivertype, driver_path=''):
     
     tblSnapsht = WaitFor(driver, By.CSS_SELECTOR, "table#snapshot_tbl")
     if tblSnapsht:
-        rows = [i for i in pq(tblSnapsht.get_attribute('innerHTML'))('tr')]
-        # pdb.set_trace()
-        for n in range(2,len(rows)-2): # Last Row contains total
-            print(rows[n].text_content())
-            vr['portfolio_raw'].append([j.text_content().strip() for j in rows[n]])
-            
-        port = vr['portfolio_raw']
-        ctr = 1
-        for tt in port:
-            li = {}
-            li['id'] = ctr
-            li['status']=''
-            try:
-                name_split_pattern = "(\s*\u00a0\s*)+\|(\s*\u00a0\s*)+"
-                tstr = re.split(name_split_pattern,tt[0].strip())
-                li['name'],li['pf_pert_allocation'] = tstr[0],tstr[-1]
-                li['vro_ratings'] = tt[1].strip()
-                li['??_1'] = tt[2].strip()
-                try:
-                    li['last_unit_price'], li['last_updated'] = tt[3].split(' ')
-                except:
-                    li['last_unit_price'], li['last_updated']= '',''
-                    li['status'] = 'ERROR'
-                li['day_chng_abs'] = tt[5].strip()
-                li['day_chng_pert'] = tt[6].strip()
-                li['cost_value'] = tt[8].strip()
-                li['cost_unit_value'] = tt[9].strip()
-                li['mkt_valu'] = tt[11].strip()
-                li['units_owned'] = tt[12].strip()
-                li['return_abs'] = tt[14].strip()
-                li['return_pert'] = tt[15].strip()
-                li['cost_unit_value'] = tt[9].strip()
-                if li['status']!='ERROR':
-                    li['status'] = 'OK'
-            except: # some portfolio itms dont list all these numbers
-                li['status'] = 'ERROR'
-            
-            vr['portfolio'].append(li)
-            ctr += 1
-            
-            if not DEBUG :
-                del vr['portfolio_raw']
+        re_pattern_summary = re.compile("(?:PORTFOLIO VALUE IN R)|(?:VALUE CHANGE TODAY IN R)|(?:TOTAL GAIN IN R \| % PA)|(?:[ ]+)")
+        re_pattern_stocks  = re.compile("(?:[ ]+)")
+        re_pattern_mfs     = re.compile("(?:[ ]+)")
+        WaitFor(driver, By.CSS_SELECTOR, "table#snapshot_tbl tbody.trData")
+        tblStock, tblMF = driver.find_elements_by_css_selector("table#snapshot_tbl tbody.trData")
+        tblStockSubTotal, tblMFSubTotal = driver.find_elements_by_css_selector("table#snapshot_tbl tbody.subtotal")
+        tblSummary = driver.find_elements_by_css_selector("table.Portfolio-summary tr")[1]
+        # print(tblMFSubTotal.get_attribute('innerHTML'))
+        # print(tblSummary.get_attribute('innerHTML'))
+        rowsStock = [i for i in pq(tblStock.get_attribute('innerHTML'))('tr:not(.soldHoldings)')]
+        rowsMF = [i for i in pq(tblMF.get_attribute('innerHTML'))('tr:not(.soldHoldings)')]
+        lstStock = []
+        lstMF = []
+        for row in rowsStock:
+            lstStock.append([re.sub(re_pattern_stocks," ",str(i.text_content())).strip() for i in pq(lxml.html.tostring(row))('td') ])
+        for row in rowsMF:
+            lstMF.append([re.sub(re_pattern_mfs," ",str(i.text_content())).strip() for i in pq(lxml.html.tostring(row))('td') ])
+        lststockSubTotal = [i.text_content() for i in pq(tblStockSubTotal.get_attribute('innerHTML'))('tr.NotImportHoldings td') ]
+        lstmfSubTotal    = [i.text_content() for i in pq(tblMFSubTotal.get_attribute('innerHTML'))('tr td') ]
+        lstsummary       = [re.sub(re_pattern_summary," ",str(i.text_content())).strip() for i in pq(tblSummary.get_attribute('innerHTML'))('td') ]
+        
+        vr["stocks_raw"] = lstStock
+        vr["mfs_raw"] = lstMF
+        vr["stock_subtotal_raw"] = lststockSubTotal
+        vr["MF_subtotal_raw"] = lstmfSubTotal
+        vr["summary_raw"] = lstsummary  
+    else:
+        raise Exception("Portfolio table not found!")
+        
     if DEBUG:        
         open("valueresearch_portfolio.json","w").write(json.dumps(vr))
         
+    vr = cleanup_data(vr)
+    if DEBUG:        
+        open("valueresearch_portfolio_clean.json","w").write(json.dumps(vr))
     return(vr)
     
 if __name__ == "__main__":
-    orders = get_portfolio(os.environ['VR_username'],os.environ['VR_passwd'],"Chrome",r"D:\Projects\projects\valueresearch\downloads\chromedriver.exe")
+    import os 
+    dir_path = os.path.dirname(os.path.realpath(__file__))
+    # orders = get_portfolio(os.environ['VR_username'],os.environ['VR_passwd'],"Chrome",dir_path+os.path.sep+r"chromedriver\chromedriver.exe")
+    vr = cleanup_data()
