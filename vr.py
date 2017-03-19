@@ -49,12 +49,12 @@ def cleanup_data(vr=None):
     # summaryvalue
     d = {
         "totalvalue":vr["summary_raw"][0],
-        "onedaychngamt":vr["summary_raw"][1].split("|")[0].strip(),
-        "onedaychngpert":vr["summary_raw"][1].split("|")[1].strip(),
-        "totalprofitamt":vr["summary_raw"][2].split("|")[0].strip(),
-        "totalprofitpert":vr["summary_raw"][2].split("|")[1].strip(),
+        "onedaychngamt":vr["summary_raw"][1].split(r"|")[0].strip(),
+        "onedaychngpert":vr["summary_raw"][1].split(r"|")[1].strip(),
+        "totalgrowthamt":vr["summary_raw"][2].split(r"|")[0].strip(),
+        "totalgrowthpert":vr["summary_raw"][2].split(r"|")[1].strip(),
         }
-    vr['summaryvalue'] = lstCategory
+    vr['summaryvalue'] = d
     lstCategory = []
     
     # stocksubtotal
@@ -119,6 +119,13 @@ def cleanup_data(vr=None):
         })
     vr['mfs'] = lstCategory
     lstCategory = []
+    
+    del vr["stocks_raw"]
+    del vr["mfs_raw"]
+    del vr["stock_subtotal_raw"]
+    del vr["MF_subtotal_raw"]
+    del vr["summary_raw"] 
+    
     
     return vr
  
@@ -243,5 +250,6 @@ def get_portfolio(email,passwd, drivertype, driver_path=''):
 if __name__ == "__main__":
     import os 
     dir_path = os.path.dirname(os.path.realpath(__file__))
-    # orders = get_portfolio(os.environ['VR_username'],os.environ['VR_passwd'],"Chrome",dir_path+os.path.sep+r"chromedriver\chromedriver.exe")
-    vr = cleanup_data()
+    orders = get_portfolio(os.environ['VR_username'],os.environ['VR_passwd'],"Chrome",dir_path+os.path.sep+r"chromedriver\chromedriver.exe")
+    # vr = cleanup_data()
+    # open("valueresearch_portfolio_clean.json","w").write(json.dumps(vr))
